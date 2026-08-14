@@ -48,10 +48,16 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
 		sessionRegistry.add(roomId, session);
 		log.info("WebSocket connected: room={} player={}", roomId, playerId);
 
-		roomStateStore.find(roomId).ifPresent(state -> {
+		roomStateStore.find(roomId).ifPresentOrElse(state -> {
 			state.getNicknamesByPlayer().put(playerId, nickname(session));
 			roomStateStore.save(state);
 			sendSync(session, state);
+		}, () -> {
+			// 상태가 없으면(만료됐거나 없는 방) 예전에는 아무것도 안 보냈다. 그러면 클라이언트는
+			// 정상 연결된 줄 알고 000짜리 다이얼을 그린 채 조작만 계속 씹히는, 원인을 알 수 없는
+			// 화면이 된다. 이제 명시적으로 알려서 사용자가 상황을 알 수 있게 한다.
+			log.info("Room state not found on connect: room={}", roomId);
+			sendTo(roomId, session, TurnRejectedMessage.of("ROOM_NOT_FOUND", null));
 		});
 		broadcastPresence(roomId);
 	}
@@ -74,19 +80,19 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
 			ActionResult result = gameService.act(roomId, playerId, payload);
 			broadcast(roomId, result.finished() ? result.gameOver() : result.updated());
 		} catch (InvalidActionException e) {
-			sendTo(session, TurnRejectedMessage.of("INVALID_ACTION", null));
+			sendTo(roomId, session, TurnRejectedMessage.of("INVALID_ACTION", null));
 		} catch (GameFinishedException e) {
-			sendTo(session, TurnRejectedMessage.of("GAME_FINISHED", null));
+			sendTo(roomId, session, TurnRejectedMessage.of("GAME_FINISHED", null));
 		} catch (RoomNotFoundException e) {
-			sendTo(session, TurnRejectedMessage.of("ROOM_NOT_FOUND", null));
+			sendTo(roomId, session, TurnRejectedMessage.of("ROOM_NOT_FOUND", null));
 		} catch (RoomLockAcquisitionException e) {
-			sendTo(session, TurnRejectedMessage.of("SERVER_BUSY", null));
+			sendTo(roomId, session, TurnRejectedMessage.of("SERVER_BUSY", null));
 		}
 	}
 
 	private void sendSync(WebSocketSession session, RoomState state) {
-		sendTo(session, RoomSyncMessage.of(state.getRoomId(), state.getStatus(), state.getCurrentGuess(),
-				state.getTurnCount()));
+		sendTo(state.getRoomId(), session, RoomSyncMessage.of(state.getRoomId(), state.getStatus(),
+				state.getCurrentGuess(), state.getTurnCount()));
 	}
 
 	private void broadcastPresence(String roomId) {
@@ -106,9 +112,14 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
 		}
 	}
 
-	private void sendTo(WebSocketSession session, Object payload) {
+	/**
+	 * 특정 세션에게만 전송한다. 반드시 레지스트리에 보관된(동시성 안전하게 감싼) 세션으로
+	 * 보내야, 다른 스레드의 브로드캐스트와 전송이 겹쳐 연결이 깨지지 않는다.
+	 */
+	private void sendTo(String roomId, WebSocketSession session, Object payload) {
+		WebSocketSession target = sessionRegistry.find(roomId, session).orElse(session);
 		try {
-			session.sendMessage(new TextMessage(objectMapper.writeValueAsString(payload)));
+			target.sendMessage(new TextMessage(objectMapper.writeValueAsString(payload)));
 		} catch (IOException e) {
 			log.error("Failed to send message to session {}", session.getId(), e);
 		}

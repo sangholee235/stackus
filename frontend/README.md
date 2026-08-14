@@ -1,32 +1,30 @@
-# React + TypeScript + Vite
+# frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+stackus(3자리 암호 맞추기)의 웹 클라이언트. React + TypeScript + Vite + Tailwind.
 
-Currently, two official plugins are available:
+프로젝트 전체 설명과 실행 방법은 저장소 루트의 [README](../README.md)를 참고할 것.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 이 디렉터리만 따로 실행
 
-## React Compiler
+백엔드가 `http://localhost:8080`에 떠 있어야 한다.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+cp .env.example .env
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## 구조
+
+```
+src/
+  pages/      화면 단위 (방 만들기 / 방 / 결과 목록)
+  game/       공유 다이얼 UI
+  hooks/      useRoomSocket — WebSocket 연결, 재연결, 서버 메시지 → 상태 반영
+  services/   REST(api.ts), WebSocket(socket.ts), 닉네임 보관
+  types/      서버와 주고받는 메시지 타입
+```
+
+라우팅 라이브러리는 쓰지 않는다. `App.tsx`에서 `window.location.pathname`으로만 분기하므로,
+`/rooms/:id` 같은 경로를 새로고침해도 동작하려면 서버가 없는 경로를 `index.html`로
+넘겨줘야 한다 (`nginx.conf`의 `try_files` 참고).

@@ -65,10 +65,20 @@ export default function RoomPage({ roomId }: RoomPageProps) {
 }
 
 function RoomGame({ roomId, nickname }: { roomId: string; nickname: string }) {
-	const { connectionStatus, roomStatus, guess, turnCount, gameOver, playerCount, lastAction, adjust } =
-		useRoomSocket(roomId, nickname);
+	const {
+		connectionStatus,
+		roomStatus,
+		guess,
+		turnCount,
+		gameOver,
+		playerCount,
+		lastAction,
+		notice,
+		roomUnavailable,
+		adjust,
+	} = useRoomSocket(roomId, nickname);
 	const isFinished = roomStatus === "FINISHED";
-	const locked = connectionStatus !== "open" || isFinished;
+	const locked = connectionStatus !== "open" || isFinished || roomUnavailable;
 	const roomName = useRoomName(roomId);
 
 	function handleAdjust(digitIndex: number, direction: Direction) {
@@ -102,6 +112,12 @@ function RoomGame({ roomId, nickname }: { roomId: string; nickname: string }) {
 					? "암호가 풀렸습니다! 🎉"
 					: "링크로 들어온 아무나, 아무 때나 화살표로 자리를 돌릴 수 있어요."}
 			</p>
+
+			{notice && !isFinished && (
+				<p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">
+					{notice}
+				</p>
+			)}
 
 			{!isFinished && lastAction && (
 				<p className="text-xs text-slate-500">
