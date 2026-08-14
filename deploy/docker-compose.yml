@@ -1,0 +1,71 @@
+# 메모리가 아주 작은 서버(예: 911MB) 배포용. 로컬 개발용 docker-compose.yml과 별개다.
+#
+# - MySQL/Kafka 대신 Redis(가벼움) + 파일 기반 H2(별도 컨테이너 불필요)만 쓴다.
+# - frontend는 Vite 개발 서버가 아니라 nginx가 정적 빌드를 서빙하고,
+#   /api·/ws 요청은 nginx가 내부적으로 backend 컨테이너로 그대로 흘려보낸다
+#   (공인 포트는 80 하나만 열면 되고, 브라우저 입장에선 동일 출처라 CORS 문제도 없다).
+# - JVM 힙을 명시적으로 제한해(JAVA_TOOL_OPTIONS) 다른 서비스와 메모리를 나눠 써도
+#   한쪽이 튀어서 서버 전체가 죽는 일을 줄인다.
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: stackus-redis
+    restart: unless-stopped
+    mem_limit: 48m
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - stackus-net
+
+  backend:
+    image: stackus-backend:latest
+    build:
+      context: ../backend
+    container_name: stackus-backend
+    restart: unless-stopped
+    mem_limit: 320m
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      H2_DATA_PATH: /data/stackus
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN}
+      JAVA_TOOL_OPTIONS: "-Xmx256m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+    volumes:
+      - backend-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - stackus-net
+
+  frontend:
+    image: stackus-frontend:latest
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_WS_BASE_URL: ${PUBLIC_WS_ORIGIN}
+    container_name: stackus-frontend
+    restart: unless-stopped
+    mem_limit: 32m
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - stackus-net
+
+networks:
+  stackus-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+  backend-data:

@@ -1,0 +1,30 @@
+# Environment
+.env
+.env.local
+
+# Backend (Gradle / Java)
+backend/.gradle/
+backend/build/
+backend/out/
+backend/!gradle/wrapper/gradle-wrapper.jar
+*.class
+*.jar
+!gradle-wrapper.jar
+
+# Frontend (Node / Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes (local data, if bind-mounted)
+infra/docker/**/data/

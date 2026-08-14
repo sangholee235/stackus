@@ -1,0 +1,65 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: stackus-backend
+
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:stackus}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${MYSQL_USERNAME:stackus}
+    password: ${MYSQL_PASSWORD:stackus_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  game:
+    # 암호는 digit-count자리, 각 자리는 [0, digit-base) 범위를 순환한다. 쿨타임 없음 —
+    # 누구나 아무 때나 연달아 돌릴 수 있다.
+    digit-count: ${GAME_DIGIT_COUNT:3}
+    digit-base: ${GAME_DIGIT_BASE:10}
+    lock-timeout-millis: ${GAME_LOCK_TIMEOUT_MILLIS:3000}
+
+logging:
+  level:
+    com.stackus: DEBUG
+
+---
+# 메모리가 아주 작은 서버에 배포할 때 쓰는 프로파일. MySQL 컨테이너 없이 파일 하나짜리
+# H2로 영구 저장하고(재시작해도 데이터 유지), 로그 레벨도 낮춰 오버헤드를 줄인다.
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:h2:file:${H2_DATA_PATH:/data/stackus};MODE=MySQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.H2Dialect
+
+logging:
+  level:
+    com.stackus: INFO
+    root: WARN
