@@ -1,4 +1,4 @@
-import type { AdjustMessage, ServerMessage } from "../types/code";
+import type { GuessMessage, ServerMessage } from "../types/baseball";
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL as string;
 
@@ -23,6 +23,6 @@ export function connectRoomSocket(roomId: string, nickname: string, handlers: Ro
 	return socket;
 }
 
-export function sendAdjust(socket: WebSocket, message: AdjustMessage): void {
+export function sendGuess(socket: WebSocket, message: GuessMessage): void {
 	socket.send(JSON.stringify(message));
 }

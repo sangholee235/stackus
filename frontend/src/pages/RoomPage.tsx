@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import NicknameGate from "../components/NicknameGate";
-import CodeDial from "../game/CodeDial";
+import GuessHistory from "../game/GuessHistory";
+import GuessInput from "../game/GuessInput";
 import { useRoomSocket, type ConnectionStatus } from "../hooks/useRoomSocket";
 import { createRoom, getRoom } from "../services/api";
 import { getSavedNickname } from "../services/nickname";
-import type { Direction } from "../types/code";
 import type { RoomStatus } from "../types/room";
 
 interface RoomPageProps {
@@ -14,7 +14,7 @@ interface RoomPageProps {
 const ROOM_STATUS_LABEL: Record<RoomStatus, string> = {
 	WAITING: "대기 중",
 	PLAYING: "진행 중",
-	FINISHED: "풀림",
+	FINISHED: "정답",
 };
 
 const ROOM_STATUS_DOT: Record<RoomStatus, string> = {
@@ -35,7 +35,7 @@ function useRoomName(roomId: string): string | null {
 	return name;
 }
 
-function formatElapsed(seconds: number): string {
+export function formatElapsed(seconds: number): string {
 	if (seconds < 60) {
 		return `${seconds}초`;
 	}
@@ -44,7 +44,10 @@ function formatElapsed(seconds: number): string {
 		return `${minutes}분 ${seconds % 60}초`;
 	}
 	const hours = Math.floor(minutes / 60);
-	return `${hours}시간 ${minutes % 60}분`;
+	if (hours < 24) {
+		return `${hours}시간 ${minutes % 60}분`;
+	}
+	return `${Math.floor(hours / 24)}일 ${hours % 24}시간`;
 }
 
 export default function RoomPage({ roomId }: RoomPageProps) {
@@ -53,7 +56,7 @@ export default function RoomPage({ roomId }: RoomPageProps) {
 	if (!nickname) {
 		return (
 			<NicknameGate
-				title="3자리 암호"
+				title="협동 숫자야구"
 				description="이 방에서 다른 사람들에게 보여질 닉네임을 정해주세요."
 				submitLabel="입장하기"
 				onSubmit={setNickname}
@@ -68,30 +71,23 @@ function RoomGame({ roomId, nickname }: { roomId: string; nickname: string }) {
 	const {
 		connectionStatus,
 		roomStatus,
-		guess,
-		turnCount,
+		guesses,
+		digitCount,
 		gameOver,
 		playerCount,
-		lastAction,
 		notice,
 		roomUnavailable,
-		adjust,
+		submitGuess,
 	} = useRoomSocket(roomId, nickname);
 	const isFinished = roomStatus === "FINISHED";
 	const locked = connectionStatus !== "open" || isFinished || roomUnavailable;
 	const roomName = useRoomName(roomId);
 
-	function handleAdjust(digitIndex: number, direction: Direction) {
-		if (!locked) {
-			adjust({ digitIndex, direction });
-		}
-	}
-
 	return (
 		<div className="flex min-h-screen flex-col items-center gap-4 bg-slate-950 p-6 text-slate-100">
 			<div className="flex flex-col items-center gap-1">
 				<div className="flex items-center gap-3">
-					<h1 className="text-2xl font-semibold">{roomName ?? "3자리 암호"}</h1>
+					<h1 className="text-2xl font-semibold">{roomName ?? "협동 숫자야구"}</h1>
 					<CopyLinkButton />
 					<NewRoomButton />
 				</div>
@@ -101,35 +97,26 @@ function RoomGame({ roomId, nickname }: { roomId: string; nickname: string }) {
 			<StatsBar
 				roomStatus={roomStatus}
 				playerCount={playerCount}
-				turnCount={turnCount}
+				guessCount={guesses.length}
 				connectionStatus={connectionStatus}
 			/>
 
-			<CodeDial guess={guess} locked={locked} onAdjust={handleAdjust} />
+			{!isFinished && <RuleHint digitCount={digitCount} />}
 
-			<p className="h-6 text-sm text-slate-400">
-				{isFinished
-					? "암호가 풀렸습니다! 🎉"
-					: "링크로 들어온 아무나, 아무 때나 화살표로 자리를 돌릴 수 있어요."}
-			</p>
+			<GuessInput digitCount={digitCount} disabled={locked} onSubmit={(digits) => submitGuess({ digits })} />
 
-			{notice && !isFinished && (
+			{notice && (
 				<p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">
 					{notice}
 				</p>
 			)}
 
-			{!isFinished && lastAction && (
-				<p className="text-xs text-slate-500">
-					방금 <span className="text-slate-300">{lastAction.nickname}</span>님이{" "}
-					{lastAction.digitIndex + 1}번째 자리를 {lastAction.direction === "UP" ? "▲" : "▼"} 돌렸어요
-				</p>
-			)}
+			<GuessHistory guesses={guesses} />
 
 			{isFinished && gameOver && (
 				<GameOverModal
 					code={gameOver.code}
-					turnCount={gameOver.turnCount}
+					guessCount={gameOver.guessCount}
 					elapsedSeconds={gameOver.elapsedSeconds}
 					solverNickname={gameOver.solverNickname}
 				/>
@@ -138,15 +125,38 @@ function RoomGame({ roomId, nickname }: { roomId: string; nickname: string }) {
 	);
 }
 
+/**
+ * 규칙 안내. 한 문단으로 늘어놓으면 줄바꿈이 제멋대로 걸려 읽기 나쁘므로,
+ * 판정 기호는 줄 단위로 끊어서 눈에 바로 들어오게 배치한다.
+ */
+function RuleHint({ digitCount }: { digitCount: number }) {
+	return (
+		<div className="flex max-w-xs flex-col items-center gap-1.5 text-xs text-slate-500">
+			<p>서로 다른 숫자 {digitCount}개를 맞혀보세요.</p>
+			<div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+				<span>
+					<span className="font-semibold text-emerald-300">S</span> 숫자와 자리가 맞음
+				</span>
+				<span>
+					<span className="font-semibold text-amber-300">B</span> 숫자만 맞음
+				</span>
+				<span>
+					<span className="font-semibold text-slate-400">아웃</span> 둘 다 없음
+				</span>
+			</div>
+		</div>
+	);
+}
+
 function StatsBar({
 	roomStatus,
 	playerCount,
-	turnCount,
+	guessCount,
 	connectionStatus,
 }: {
 	roomStatus: RoomStatus;
 	playerCount: number;
-	turnCount: number;
+	guessCount: number;
 	connectionStatus: ConnectionStatus;
 }) {
 	return (
@@ -156,7 +166,7 @@ function StatsBar({
 				{ROOM_STATUS_LABEL[roomStatus]}
 			</StatBadge>
 			<StatBadge>👥 {playerCount}명 접속 중</StatBadge>
-			<StatBadge>🔁 {turnCount}턴</StatBadge>
+			<StatBadge>🎯 {guessCount}번째 시도</StatBadge>
 			<StatBadge>
 				<span
 					className={`h-1.5 w-1.5 rounded-full ${connectionStatus === "open" ? "bg-emerald-400" : "bg-amber-400"}`}
@@ -176,10 +186,8 @@ function StatBadge({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * 지금 이 방의 결과를 기다리지 않고, 아무 때나 완전히 새로운 방(=새 암호)을 만들어
- * 그 링크로 바로 이동한다. 게임이 끝나야만 새 방을 만들 수 있던 걸(GameOverModal
- * 안에서만 제공하던 버튼) 상시 노출로 바꾼 것 — 지금 풀리고 있는 암호를 그대로 두고
- * 다른 사람들과 별도로 새 방을 시작하고 싶을 수도 있기 때문이다.
+ * 지금 이 방의 결과를 기다리지 않고, 아무 때나 완전히 새로운 방(=새 정답)을 만들어
+ * 그 링크로 바로 이동한다.
  */
 function NewRoomButton() {
 	const [isCreating, setIsCreating] = useState(false);
@@ -228,12 +236,12 @@ function CopyLinkButton() {
 
 function GameOverModal({
 	code,
-	turnCount,
+	guessCount,
 	elapsedSeconds,
 	solverNickname,
 }: {
 	code: number[];
-	turnCount: number;
+	guessCount: number;
 	elapsedSeconds: number;
 	solverNickname: string;
 }) {
@@ -248,10 +256,10 @@ function GameOverModal({
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
 			<div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-lg border border-emerald-400 bg-slate-900 px-8 py-6 text-center shadow-xl">
-				<p className="text-xl font-bold text-emerald-300">암호를 풀었습니다! 🎉</p>
+				<p className="text-xl font-bold text-emerald-300">정답입니다! 🎉</p>
 				<p className="text-4xl font-bold tabular-nums tracking-widest">{code.join(" ")}</p>
 				<p className="text-sm text-slate-400">
-					<span className="font-semibold text-slate-200">{solverNickname}</span>님이 {turnCount}번째 턴에 완성
+					<span className="font-semibold text-slate-200">{solverNickname}</span>님이 {guessCount}번째 시도에 성공
 				</p>
 				<p className="text-sm text-slate-400">걸린 시간: {formatElapsed(elapsedSeconds)}</p>
 				<button
@@ -260,10 +268,10 @@ function GameOverModal({
 					disabled={isCreating}
 					className="mt-2 w-full rounded-md bg-indigo-500 px-6 py-2 font-medium hover:bg-indigo-400 disabled:opacity-50"
 				>
-					{isCreating ? "만드는 중..." : "새 암호 만들기"}
+					{isCreating ? "만드는 중..." : "새 문제 만들기"}
 				</button>
 				<a href="/leaderboard" className="text-sm text-slate-400 underline hover:text-slate-200">
-					🏆 최근 결과 보기
+					🏆 최고 기록 보기
 				</a>
 			</div>
 		</div>

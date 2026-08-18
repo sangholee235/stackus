@@ -1,7 +1,8 @@
 package com.stackus.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stackus.dto.AdjustMessage;
+import com.stackus.config.GameProperties;
+import com.stackus.dto.GuessMessage;
 import com.stackus.dto.PresenceMessage;
 import com.stackus.dto.RoomSyncMessage;
 import com.stackus.dto.TurnRejectedMessage;
@@ -11,7 +12,7 @@ import com.stackus.redis.RoomStateStore;
 import com.stackus.service.ActionResult;
 import com.stackus.service.GameFinishedException;
 import com.stackus.service.GameService;
-import com.stackus.service.InvalidActionException;
+import com.stackus.service.InvalidGuessException;
 import com.stackus.service.RoomNotFoundException;
 import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
@@ -31,13 +32,15 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
 	private final RoomSessionRegistry sessionRegistry;
 	private final GameService gameService;
 	private final RoomStateStore roomStateStore;
+	private final GameProperties gameProperties;
 	private final ObjectMapper objectMapper;
 
 	public RoomWebSocketHandler(RoomSessionRegistry sessionRegistry, GameService gameService,
-			RoomStateStore roomStateStore, ObjectMapper objectMapper) {
+			RoomStateStore roomStateStore, GameProperties gameProperties, ObjectMapper objectMapper) {
 		this.sessionRegistry = sessionRegistry;
 		this.gameService = gameService;
 		this.roomStateStore = roomStateStore;
+		this.gameProperties = gameProperties;
 		this.objectMapper = objectMapper;
 	}
 
@@ -48,13 +51,15 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
 		sessionRegistry.add(roomId, session);
 		log.info("WebSocket connected: room={} player={}", roomId, playerId);
 
+		// 접속만으로는 방 상태를 절대 건드리지 않는다(읽기 전용). 예전엔 여기서 닉네임을
+		// 읽고-고쳐-쓰기 했는데, 락이 없어서 두 명이 동시에 들어오면 서로의 닉네임을
+		// 덮어써 버렸다(실제로 상대가 "익명"으로 표시됐다). 닉네임은 추측을 제출할 때
+		// 세션에서 그대로 넘기므로 방 상태에 보관할 이유가 없다.
 		roomStateStore.find(roomId).ifPresentOrElse(state -> {
-			state.getNicknamesByPlayer().put(playerId, nickname(session));
-			roomStateStore.save(state);
 			sendSync(session, state);
 		}, () -> {
 			// 상태가 없으면(만료됐거나 없는 방) 예전에는 아무것도 안 보냈다. 그러면 클라이언트는
-			// 정상 연결된 줄 알고 000짜리 다이얼을 그린 채 조작만 계속 씹히는, 원인을 알 수 없는
+			// 정상 연결된 줄 알고 빈 화면을 그린 채 조작만 계속 씹히는, 원인을 알 수 없는
 			// 화면이 된다. 이제 명시적으로 알려서 사용자가 상황을 알 수 있게 한다.
 			log.info("Room state not found on connect: room={}", roomId);
 			sendTo(roomId, session, TurnRejectedMessage.of("ROOM_NOT_FOUND", null));
@@ -75,12 +80,19 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
 		String roomId = roomId(session);
 		String playerId = playerId(session);
 
-		AdjustMessage payload = objectMapper.readValue(message.getPayload(), AdjustMessage.class);
+		GuessMessage payload;
 		try {
-			ActionResult result = gameService.act(roomId, playerId, payload);
-			broadcast(roomId, result.finished() ? result.gameOver() : result.updated());
-		} catch (InvalidActionException e) {
-			sendTo(roomId, session, TurnRejectedMessage.of("INVALID_ACTION", null));
+			payload = objectMapper.readValue(message.getPayload(), GuessMessage.class);
+		} catch (IOException e) {
+			sendTo(roomId, session, TurnRejectedMessage.of("MALFORMED", null));
+			return;
+		}
+
+		try {
+			ActionResult result = gameService.submitGuess(roomId, playerId, nickname(session), payload);
+			broadcast(roomId, result.finished() ? result.gameOver() : result.added());
+		} catch (InvalidGuessException e) {
+			sendTo(roomId, session, TurnRejectedMessage.of(e.getReason().name(), null));
 		} catch (GameFinishedException e) {
 			sendTo(roomId, session, TurnRejectedMessage.of("GAME_FINISHED", null));
 		} catch (RoomNotFoundException e) {
@@ -92,7 +104,7 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
 
 	private void sendSync(WebSocketSession session, RoomState state) {
 		sendTo(state.getRoomId(), session, RoomSyncMessage.of(state.getRoomId(), state.getStatus(),
-				state.getCurrentGuess(), state.getTurnCount()));
+				state.getGuesses(), gameProperties.digitCount()));
 	}
 
 	private void broadcastPresence(String roomId) {

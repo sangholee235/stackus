@@ -31,8 +31,8 @@ public class GameResult {
 	@Column(name = "room_name", nullable = false, length = 30)
 	private String roomName;
 
-	@Column(name = "turn_count", nullable = false)
-	private int turnCount;
+	@Column(name = "guess_count", nullable = false)
+	private int guessCount;
 
 	/** 방이 만들어진 시각부터 암호가 풀린 시각까지, 실제 흐른 시간(초). */
 	@Column(name = "elapsed_seconds", nullable = false)
@@ -51,11 +51,11 @@ public class GameResult {
 	@Column(name = "ended_at", nullable = false)
 	private Instant endedAt;
 
-	private GameResult(String roomId, String roomName, int turnCount, long elapsedSeconds, int participantCount,
+	private GameResult(String roomId, String roomName, int guessCount, long elapsedSeconds, int participantCount,
 			String solverPlayerId, String solverNickname) {
 		this.roomId = roomId;
 		this.roomName = roomName;
-		this.turnCount = turnCount;
+		this.guessCount = guessCount;
 		this.elapsedSeconds = elapsedSeconds;
 		this.participantCount = participantCount;
 		this.solverPlayerId = solverPlayerId;
@@ -63,9 +63,9 @@ public class GameResult {
 		this.endedAt = Instant.now();
 	}
 
-	public static GameResult create(String roomId, String roomName, int turnCount, long elapsedSeconds,
+	public static GameResult create(String roomId, String roomName, int guessCount, long elapsedSeconds,
 			int participantCount, String solverPlayerId, String solverNickname) {
-		return new GameResult(roomId, roomName, turnCount, elapsedSeconds, participantCount, solverPlayerId,
+		return new GameResult(roomId, roomName, guessCount, elapsedSeconds, participantCount, solverPlayerId,
 				solverNickname);
 	}
 }

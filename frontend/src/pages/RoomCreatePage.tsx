@@ -25,7 +25,7 @@ export default function RoomCreatePage() {
 	if (!nickname) {
 		return (
 			<NicknameGate
-				title="3자리 암호"
+				title="협동 숫자야구"
 				description="다른 사람들에게 보여질 닉네임을 정해주세요."
 				submitLabel="계속하기"
 				onSubmit={setNickname}
@@ -35,9 +35,9 @@ export default function RoomCreatePage() {
 
 	return (
 		<div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 text-slate-100">
-			<h1 className="text-3xl font-semibold">🔢 3자리 암호</h1>
+			<h1 className="text-3xl font-semibold">⚾ 협동 숫자야구</h1>
 			<p className="text-slate-400">
-				링크를 공유하고, 아무 때나 들어와 다이얼을 돌려 숨겨진 암호를 다 같이 맞춰보세요.
+				링크를 공유하고, 아무 때나 들어와 다 같이 숨겨진 숫자를 추리해보세요.
 			</p>
 			<p className="text-xs text-slate-500">
 				{nickname}님으로 입장합니다 ·{" "}

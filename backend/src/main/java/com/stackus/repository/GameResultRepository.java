@@ -9,6 +9,6 @@ public interface GameResultRepository extends JpaRepository<GameResult, Long> {
 
 	Optional<GameResult> findByRoomId(String roomId);
 
-	/** 가장 적은 턴으로 깬 순서. 턴이 같으면 리포지토리 기본 정렬(등록 순)로 처리된다. */
-	List<GameResult> findTop20ByOrderByTurnCountAsc();
+	/** 가장 적은 횟수로 깬 순서. 턴이 같으면 리포지토리 기본 정렬(등록 순)로 처리된다. */
+	List<GameResult> findTop20ByOrderByGuessCountAsc();
 }

@@ -10,7 +10,7 @@ export interface Room {
 export interface GameResult {
 	roomId: string;
 	roomName: string;
-	turnCount: number;
+	guessCount: number;
 	elapsedSeconds: number;
 	participantCount: number;
 	solverNickname: string | null;
@@ -20,7 +20,7 @@ export interface GameResult {
 export interface LeaderboardEntry {
 	roomId: string;
 	roomName: string;
-	turnCount: number;
+	guessCount: number;
 	elapsedSeconds: number;
 	participantCount: number;
 	solverNickname: string | null;

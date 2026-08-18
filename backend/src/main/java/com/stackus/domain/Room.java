@@ -51,7 +51,7 @@ public class Room {
 
 	public static Room create(String roomId, String name) {
 		String trimmed = name == null ? "" : name.trim();
-		String safeName = trimmed.isBlank() ? "이름 없는 암호" : trimmed;
+		String safeName = trimmed.isBlank() ? "이름 없는 게임" : trimmed;
 		if (safeName.length() > NAME_MAX_LENGTH) {
 			safeName = safeName.substring(0, NAME_MAX_LENGTH);
 		}

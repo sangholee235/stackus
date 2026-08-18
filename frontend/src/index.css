@@ -2,4 +2,9 @@
 
 body {
 	margin: 0;
+	/* 한글은 기본값(word-break: normal)이면 단어 도중에도 줄이 끊겨
+	   "스트 / 라이크(S)"처럼 읽기 나쁘게 갈라진다. keep-all로 어절 단위로만
+	   끊고, 대신 끊을 곳이 없는 아주 긴 문자열은 넘치지 않도록 예외를 둔다. */
+	word-break: keep-all;
+	overflow-wrap: break-word;
 }

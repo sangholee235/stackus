@@ -34,12 +34,12 @@ export default function LeaderboardPage() {
 					방 만들기
 				</a>
 			</div>
-			<p className="text-sm text-slate-400">가장 적은 턴으로 암호를 푼 방 20개</p>
+			<p className="text-sm text-slate-400">가장 적은 횟수로 정답을 맞힌 방 20개</p>
 
 			{error && <p className="text-red-400">{error}</p>}
 			{!entries && !error && <p className="text-slate-400">불러오는 중...</p>}
 			{entries && entries.length === 0 && (
-				<p className="text-slate-400">아직 풀린 암호가 없습니다. 첫 기록을 남겨보세요!</p>
+				<p className="text-slate-400">아직 정답이 나온 방이 없습니다. 첫 기록을 남겨보세요!</p>
 			)}
 
 			{entries && entries.length > 0 && (
@@ -54,11 +54,11 @@ export default function LeaderboardPage() {
 								<p className="font-semibold">
 									{entry.roomName}
 									<span className="ml-2 text-xs font-normal text-slate-500">
-										{entry.turnCount}턴 · {formatElapsed(entry.elapsedSeconds)} · 참여 {entry.participantCount}명
+										{entry.guessCount}번 만에 · {formatElapsed(entry.elapsedSeconds)} · 참여 {entry.participantCount}명
 									</span>
 								</p>
 								<p className="text-xs text-slate-500">
-									{entry.solverNickname ? `푼 사람: ${entry.solverNickname} · ` : ""}
+									{entry.solverNickname ? `맞힌 사람: ${entry.solverNickname} · ` : ""}
 									{new Date(entry.endedAt).toLocaleString()}
 								</p>
 							</div>

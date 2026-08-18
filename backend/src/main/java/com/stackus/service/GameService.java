@@ -2,26 +2,30 @@ package com.stackus.service;
 
 import com.stackus.config.GameProperties;
 import com.stackus.domain.RoomStatus;
-import com.stackus.dto.AdjustMessage;
 import com.stackus.dto.GameOverBroadcast;
-import com.stackus.dto.GuessUpdateBroadcast;
+import com.stackus.dto.GuessAddedBroadcast;
+import com.stackus.dto.GuessMessage;
+import com.stackus.redis.GuessRecord;
 import com.stackus.redis.RoomState;
 import com.stackus.redis.RoomStateStore;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
- * "3자리 암호 풀기" 게임의 authoritative 처리를 담당한다.
+ * 협동 숫자야구의 authoritative 처리를 담당한다.
  *
- * <p>공유 상태는 숫자 배열 하나(currentGuess)뿐이고, 행동도 "자리 하나를 +1 또는 -1"
- * 뿐이다. 위치나 형태 같은 기하학적 값이 전혀 없으므로 서버가 계산한 결과와 클라이언트
- * 화면이 어긋날 여지 자체가 없다 — 그냥 정수를 더하고 빼는 것뿐이라 100% 결정론적이다.
+ * <p>서버는 방마다 서로 다른 숫자로 이루어진 비밀 코드를 하나 정해두고, 누가 추측을
+ * 제출하든 스트라이크(숫자와 자리가 모두 맞음)/볼(숫자는 있지만 자리가 틀림) 개수만
+ * 돌려준다. 정답 자체는 맞히기 전까지 절대 내보내지 않는다.
  *
- * <p>누구나 아무 때나(동시 접속 여부와 무관하게, 쿨타임도 없이) 링크로 들어와 다이얼을
- * 돌릴 수 있다. 별도의 "방해" 행동은 없다 — 아무나 엉뚱한 방향으로 돌리는 것 자체가
- * 자연스러운 방해다. 다이얼이 비밀 코드와 정확히 같아지는 순간 게임이 끝나고, 그때까지
- * 걸린 턴 수와 (방이 만들어진 시각 기준) 실제 시간이 함께 기록된다.
+ * <p>모든 추측 기록은 방에 그대로 쌓이고 누구에게나 공개된다 — 그래서 나중에 들어온
+ * 사람도 앞사람들이 뭘 시도했는지 읽고 곧바로 추리에 합류할 수 있다. 쿨타임은 없고
+ * 동시 접속 여부와도 무관하다. 판정은 정수 비교뿐이라 100% 결정론적이어서, 서버가
+ * 계산한 결과와 각자의 화면이 어긋날 여지가 없다.
  */
 @Service
 public class GameService {
@@ -36,70 +40,96 @@ public class GameService {
 		this.gameProperties = gameProperties;
 	}
 
-	public ActionResult act(String roomId, String playerId, AdjustMessage message) {
+	public ActionResult submitGuess(String roomId, String playerId, String nickname, GuessMessage message) {
 		return roomStateStore.runWithLock(roomId, gameProperties.lockTimeoutMillis(),
-				() -> doAct(roomId, playerId, message));
+				() -> doSubmitGuess(roomId, playerId, nickname, message));
 	}
 
-	private ActionResult doAct(String roomId, String playerId, AdjustMessage message) {
+	private ActionResult doSubmitGuess(String roomId, String playerId, String nickname, GuessMessage message) {
 		RoomState state = roomStateStore.find(roomId)
 				.orElseThrow(() -> new RoomNotFoundException(roomId));
 
 		if (RoomStatus.FINISHED.name().equals(state.getStatus())) {
 			throw new GameFinishedException(roomId);
 		}
-		validateDigitIndex(message.digitIndex());
-		Direction direction = parseDirection(message.direction());
+		List<Integer> digits = validate(message.digits(), state);
 
-		String nickname = state.getNicknamesByPlayer().getOrDefault(playerId, "익명");
 		state.getActorIds().add(playerId);
 		state.setStatus(RoomStatus.PLAYING.name());
-		state.setTurnCount(state.getTurnCount() + 1);
 
-		int delta = direction == Direction.UP ? 1 : -1;
-		int base = gameProperties.digitBase();
-		int current = state.getCurrentGuess().get(message.digitIndex());
-		int adjusted = Math.floorMod(current + delta, base);
-		state.getCurrentGuess().set(message.digitIndex(), adjusted);
+		int strikes = countStrikes(state.getSecretCode(), digits);
+		int balls = countMatchingDigits(state.getSecretCode(), digits) - strikes;
+		GuessRecord record = new GuessRecord(
+				UUID.randomUUID().toString(), playerId, nickname, digits, strikes, balls, Instant.now());
+		state.getGuesses().add(record);
 
-		if (state.getCurrentGuess().equals(state.getSecretCode())) {
-			return ActionResult.finished(finish(state, roomId, playerId, nickname));
+		if (strikes == gameProperties.digitCount()) {
+			return ActionResult.finished(finish(state, roomId, playerId, nickname, record));
 		}
 
 		roomStateStore.save(state);
-		return ActionResult.updated(GuessUpdateBroadcast.of(
-				roomId, state.getCurrentGuess(), state.getTurnCount(), nickname, message.digitIndex(),
-				direction.name()));
+		return ActionResult.added(GuessAddedBroadcast.of(roomId, record, state.getGuesses().size()));
 	}
 
-	private GameOverBroadcast finish(RoomState state, String roomId, String playerId, String nickname) {
+	/** 숫자와 자리가 모두 맞은 개수. */
+	private int countStrikes(List<Integer> secret, List<Integer> guess) {
+		int strikes = 0;
+		for (int i = 0; i < secret.size(); i++) {
+			if (secret.get(i).equals(guess.get(i))) {
+				strikes++;
+			}
+		}
+		return strikes;
+	}
+
+	/** 자리와 무관하게 정답에 포함된 숫자의 개수 (스트라이크까지 포함한 값). */
+	private int countMatchingDigits(List<Integer> secret, List<Integer> guess) {
+		Set<Integer> secretDigits = new HashSet<>(secret);
+		int matched = 0;
+		for (Integer digit : guess) {
+			if (secretDigits.contains(digit)) {
+				matched++;
+			}
+		}
+		return matched;
+	}
+
+	/**
+	 * 규칙 위반을 구체적인 사유와 함께 걸러낸다. 이미 시도된 조합도 막는데, 기록이
+	 * 모두에게 공개돼 있는 협동 게임에서 같은 조합을 다시 넣는 건 얻는 정보가 전혀 없이
+	 * 시도 횟수만 늘리는 셈이기 때문이다.
+	 */
+	private List<Integer> validate(List<Integer> digits, RoomState state) {
+		if (digits == null || digits.size() != gameProperties.digitCount()) {
+			throw new InvalidGuessException(InvalidGuessException.Reason.LENGTH);
+		}
+		for (Integer digit : digits) {
+			if (digit == null || digit < 0 || digit >= gameProperties.digitBase()) {
+				throw new InvalidGuessException(InvalidGuessException.Reason.RANGE);
+			}
+		}
+		if (new HashSet<>(digits).size() != digits.size()) {
+			throw new InvalidGuessException(InvalidGuessException.Reason.DUPLICATE);
+		}
+		boolean alreadyTried = state.getGuesses().stream()
+				.anyMatch(guess -> guess.digits().equals(digits));
+		if (alreadyTried) {
+			throw new InvalidGuessException(InvalidGuessException.Reason.ALREADY_TRIED);
+		}
+		return List.copyOf(digits);
+	}
+
+	private GameOverBroadcast finish(RoomState state, String roomId, String playerId, String nickname,
+			GuessRecord winningGuess) {
 		state.setStatus(RoomStatus.FINISHED.name());
 		Instant endedAt = Instant.now();
 		roomStateStore.save(state);
 
+		int guessCount = state.getGuesses().size();
 		long elapsedSeconds = roomService.finishGame(
-				roomId, state.getTurnCount(), state.getActorIds().size(), playerId, nickname);
+				roomId, guessCount, state.getActorIds().size(), playerId, nickname);
 
-		return GameOverBroadcast.of(
-				roomId, state.getCurrentGuess(), state.getTurnCount(), elapsedSeconds, playerId, nickname, endedAt);
-	}
-
-	private void validateDigitIndex(int digitIndex) {
-		if (digitIndex < 0 || digitIndex >= gameProperties.digitCount()) {
-			throw new InvalidActionException("digitIndex=" + digitIndex);
-		}
-	}
-
-	private Direction parseDirection(String raw) {
-		try {
-			return Direction.valueOf(raw);
-		} catch (IllegalArgumentException | NullPointerException e) {
-			throw new InvalidActionException("direction=" + raw);
-		}
-	}
-
-	/** 방 생성 시 호출되어 비밀 코드와 시작 다이얼을 뽑는다. 시작 다이얼은 항상 전부 0이다. */
-	public static List<Integer> zeroedDigits(int digitCount) {
-		return new java.util.ArrayList<>(java.util.Collections.nCopies(digitCount, 0));
+		return GameOverBroadcast.of(roomId, state.getSecretCode(), winningGuess, guessCount, elapsedSeconds,
+				playerId, nickname, endedAt);
 	}
 }
