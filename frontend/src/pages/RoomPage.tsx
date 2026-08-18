@@ -6,6 +6,7 @@ import { useRoomSocket, type ConnectionStatus } from "../hooks/useRoomSocket";
 import { createRoom, getRoom } from "../services/api";
 import { getSavedNickname } from "../services/nickname";
 import type { RoomStatus } from "../types/room";
+import { formatElapsed } from "../utils/time";
 
 interface RoomPageProps {
 	roomId: string;
@@ -33,21 +34,6 @@ function useRoomName(roomId: string): string | null {
 	}, [roomId]);
 
 	return name;
-}
-
-export function formatElapsed(seconds: number): string {
-	if (seconds < 60) {
-		return `${seconds}초`;
-	}
-	const minutes = Math.floor(seconds / 60);
-	if (minutes < 60) {
-		return `${minutes}분 ${seconds % 60}초`;
-	}
-	const hours = Math.floor(minutes / 60);
-	if (hours < 24) {
-		return `${hours}시간 ${minutes % 60}분`;
-	}
-	return `${Math.floor(hours / 24)}일 ${hours % 24}시간`;
 }
 
 export default function RoomPage({ roomId }: RoomPageProps) {
@@ -186,31 +172,79 @@ function StatBadge({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * 지금 이 방의 결과를 기다리지 않고, 아무 때나 완전히 새로운 방(=새 정답)을 만들어
- * 그 링크로 바로 이동한다.
+ * 지금 이 방의 결과를 기다리지 않고, 아무 때나 완전히 새로운 방(=새 정답)을 만든다.
+ * 방 이름은 순위표에 그대로 노출되므로 만들 때 직접 정할 수 있어야 한다 — 예전에는
+ * 이름을 물어보지 않고 바로 만들어서 전부 "이름 없는 게임"이 됐다.
  */
 function NewRoomButton() {
-	const [isCreating, setIsCreating] = useState(false);
+	const [isOpen, setIsOpen] = useState(false);
 
-	async function handleCreate() {
+	return (
+		<>
+			<button
+				type="button"
+				onClick={() => setIsOpen(true)}
+				className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800"
+			>
+				새 링크 만들기
+			</button>
+			{isOpen && <NewRoomDialog onClose={() => setIsOpen(false)} />}
+		</>
+	);
+}
+
+/** 새 방 이름을 받아 방을 만들고 그 링크로 이동한다. 이름은 비워두면 기본값이 붙는다. */
+function NewRoomDialog({ onClose }: { onClose: () => void }) {
+	const [roomName, setRoomName] = useState("");
+	const [isCreating, setIsCreating] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	async function handleSubmit(event: React.FormEvent) {
+		event.preventDefault();
 		setIsCreating(true);
+		setError(null);
 		try {
-			const room = await createRoom();
+			const room = await createRoom(roomName.trim());
 			window.location.href = `/rooms/${room.roomId}`;
 		} catch {
+			setError("방을 만들지 못했습니다. 다시 시도해주세요.");
 			setIsCreating(false);
 		}
 	}
 
 	return (
-		<button
-			type="button"
-			onClick={handleCreate}
-			disabled={isCreating}
-			className="rounded-md border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-		>
-			{isCreating ? "만드는 중..." : "새 링크 만들기"}
-		</button>
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+			<form
+				onSubmit={handleSubmit}
+				className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-slate-700 bg-slate-900 px-6 py-5 shadow-xl"
+			>
+				<p className="text-center font-semibold">새 게임 만들기</p>
+				<input
+					value={roomName}
+					onChange={(event) => setRoomName(event.target.value.slice(0, 30))}
+					placeholder="방 이름 (순위표에 표시됩니다)"
+					autoFocus
+					className="rounded-md border border-slate-700 bg-slate-950 px-4 py-2 text-center outline-none focus:border-indigo-400"
+				/>
+				{error && <p className="text-center text-sm text-red-400">{error}</p>}
+				<div className="flex gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="flex-1 rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+					>
+						취소
+					</button>
+					<button
+						type="submit"
+						disabled={isCreating}
+						className="flex-1 rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium hover:bg-indigo-400 disabled:opacity-50"
+					>
+						{isCreating ? "만드는 중..." : "만들기"}
+					</button>
+				</div>
+			</form>
+		</div>
 	);
 }
 
@@ -245,12 +279,11 @@ function GameOverModal({
 	elapsedSeconds: number;
 	solverNickname: string;
 }) {
-	const [isCreating, setIsCreating] = useState(false);
+	const [isNaming, setIsNaming] = useState(false);
 
-	async function handleNewGame() {
-		setIsCreating(true);
-		const room = await createRoom();
-		window.location.href = `/rooms/${room.roomId}`;
+	// 결과 화면에서 이어서 만드는 방도 이름을 정할 수 있어야 순위표가 의미를 갖는다.
+	if (isNaming) {
+		return <NewRoomDialog onClose={() => setIsNaming(false)} />;
 	}
 
 	return (
@@ -264,11 +297,10 @@ function GameOverModal({
 				<p className="text-sm text-slate-400">걸린 시간: {formatElapsed(elapsedSeconds)}</p>
 				<button
 					type="button"
-					onClick={handleNewGame}
-					disabled={isCreating}
-					className="mt-2 w-full rounded-md bg-indigo-500 px-6 py-2 font-medium hover:bg-indigo-400 disabled:opacity-50"
+					onClick={() => setIsNaming(true)}
+					className="mt-2 w-full rounded-md bg-indigo-500 px-6 py-2 font-medium hover:bg-indigo-400"
 				>
-					{isCreating ? "만드는 중..." : "새 문제 만들기"}
+					새 문제 만들기
 				</button>
 				<a href="/leaderboard" className="text-sm text-slate-400 underline hover:text-slate-200">
 					🏆 최고 기록 보기

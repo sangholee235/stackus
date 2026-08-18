@@ -1,20 +1,9 @@
 import { useEffect, useState } from "react";
 import { getLeaderboard } from "../services/api";
 import type { LeaderboardEntry } from "../types/room";
+import { formatElapsed } from "../utils/time";
 
 const RANK_MEDALS = ["🥇", "🥈", "🥉"];
-
-function formatElapsed(seconds: number): string {
-	if (seconds < 60) {
-		return `${seconds}초`;
-	}
-	const minutes = Math.floor(seconds / 60);
-	if (minutes < 60) {
-		return `${minutes}분`;
-	}
-	const hours = Math.floor(minutes / 60);
-	return `${hours}시간 ${minutes % 60}분`;
-}
 
 export default function LeaderboardPage() {
 	const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
