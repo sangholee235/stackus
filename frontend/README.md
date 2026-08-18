@@ -1,6 +1,6 @@
 # frontend
 
-stackus(3자리 암호 맞추기)의 웹 클라이언트. React + TypeScript + Vite + Tailwind.
+numbaseball(협동 숫자야구)의 웹 클라이언트. React + TypeScript + Vite + Tailwind.
 
 프로젝트 전체 설명과 실행 방법은 저장소 루트의 [README](../README.md)를 참고할 것.
 
@@ -19,7 +19,7 @@ npm run dev
 ```
 src/
   pages/      화면 단위 (방 만들기 / 방 / 결과 목록)
-  game/       공유 다이얼 UI
+  game/       추측 입력과 기록 UI
   hooks/      useRoomSocket — WebSocket 연결, 재연결, 서버 메시지 → 상태 반영
   services/   REST(api.ts), WebSocket(socket.ts), 닉네임 보관
   types/      서버와 주고받는 메시지 타입

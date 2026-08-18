@@ -1,4 +1,4 @@
-const STORAGE_KEY = "stackus_nickname";
+const STORAGE_KEY = "numbaseball_nickname";
 
 export function getSavedNickname(): string | null {
 	return localStorage.getItem(STORAGE_KEY);

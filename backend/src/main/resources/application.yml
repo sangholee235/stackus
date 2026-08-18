@@ -3,12 +3,12 @@ server:
 
 spring:
   application:
-    name: stackus-backend
+    name: numbaseball-backend
 
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:stackus}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${MYSQL_USERNAME:stackus}
-    password: ${MYSQL_PASSWORD:stackus_password}
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:numbaseball}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${MYSQL_USERNAME:numbaseball}
+    password: ${MYSQL_PASSWORD:numbaseball_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -36,7 +36,7 @@ app:
 
 logging:
   level:
-    com.stackus: DEBUG
+    com.numbaseball: DEBUG
 
 ---
 # 메모리가 아주 작은 서버에 배포할 때 쓰는 프로파일. MySQL 컨테이너 없이 파일 하나짜리
@@ -46,7 +46,7 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    url: jdbc:h2:file:${H2_DATA_PATH:/data/stackus};MODE=MySQL;DATABASE_TO_LOWER=TRUE
+    url: jdbc:h2:file:${H2_DATA_PATH:/data/numbaseball};MODE=MySQL;DATABASE_TO_LOWER=TRUE
     username: sa
     password:
     driver-class-name: org.h2.Driver
@@ -61,5 +61,5 @@ spring:
 
 logging:
   level:
-    com.stackus: INFO
+    com.numbaseball: INFO
     root: WARN

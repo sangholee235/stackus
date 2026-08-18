@@ -1,7 +1,7 @@
 services:
   mysql:
     image: mysql:8.4
-    container_name: stackus-mysql
+    container_name: numbaseball-mysql
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -18,11 +18,11 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - stackus-net
+      - numbaseball-net
 
   redis:
     image: redis:7.4-alpine
-    container_name: stackus-redis
+    container_name: numbaseball-redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT}:6379"
@@ -34,12 +34,12 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - stackus-net
+      - numbaseball-net
 
   backend:
     build:
       context: ./backend
-    container_name: stackus-backend
+    container_name: numbaseball-backend
     restart: unless-stopped
     environment:
       SERVER_PORT: ${SERVER_PORT}
@@ -60,12 +60,12 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - stackus-net
+      - numbaseball-net
 
   frontend:
     build:
       context: ./frontend
-    container_name: stackus-frontend
+    container_name: numbaseball-frontend
     restart: unless-stopped
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
@@ -75,10 +75,10 @@ services:
     depends_on:
       - backend
     networks:
-      - stackus-net
+      - numbaseball-net
 
 networks:
-  stackus-net:
+  numbaseball-net:
     driver: bridge
 
 volumes:

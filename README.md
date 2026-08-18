@@ -1,4 +1,4 @@
-# stackus
+# numbaseball
 
 링크 하나로 다 같이 모여 숨겨진 숫자를 추리하는 실시간 협동 숫자야구.
 
@@ -96,7 +96,7 @@ npm run dev
 # 로컬에서
 cd deploy
 docker compose --env-file .env build
-docker save stackus-backend:latest stackus-frontend:latest | gzip > images.tar.gz
+docker save numbaseball-backend:latest numbaseball-frontend:latest | gzip > images.tar.gz
 
 # 서버로 전송 후
 docker load < images.tar.gz
